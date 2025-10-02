@@ -70,47 +70,24 @@ def chat_text(messages: List[Dict], max_new_tokens: int = 300, temperature: floa
     return processor.batch_decode(out, skip_special_tokens=True)[0].strip()
 
 
-def chat_vision(
-    image: Union[str, Image.Image],
-    user_text: str,
-    system_prompt: str = "You are a precise, safety-first fitness coach.",
-    max_new_tokens: int = 300,
-    temperature: float = 0.2
-) -> str:
-    """
-    Provide an image (path or PIL.Image) plus a text question.
-    Example:
-      chat_vision("squat.jpg", "Is my back neutral? Give 3 form cues.")
-    """
-    img = Image.open(image).convert("RGB") if isinstance(image, str) else image
-
-    # Build multimodal message: list with an image part and a text part.
+def chat_vision(image_path: str, user_text: str) -> str:
+    img = Image.open(image_path).convert("RGB")
     messages = [
-        {"role": "system", "content": system_prompt},
+        {"role": "system", "content": "You are a precise, safety-first fitness coach."},
         {"role": "user", "content": [
             {"type": "image", "image": img},
             {"type": "text",  "text": user_text}
         ]}
     ]
-
-    # 1) Build text side of the chat (includes special tokens for VL)
-    inputs = processor.apply_chat_template(
-        messages,
-        add_generation_prompt=True,
-        return_tensors="pt"
-    ).to(model.device)
-
-    # 2) Add pixel values for the image
-    vision_inputs = processor(images=[img], return_tensors="pt").to(model.device)
-    inputs.update(vision_inputs)
-
+    # text side (adds special tokens)
+    inputs = processor.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
+    # image tensors
+    vis = processor(images=[img], return_tensors="pt")
+    inputs.update(vis)
+    # move to device
+    inputs = {k: v.to(model.device) for k, v in inputs.items()}
     with torch.no_grad():
-        out = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-            do_sample=True
-        )
+        out = model.generate(**inputs, max_new_tokens=300, temperature=0.2, do_sample=True)
     return processor.batch_decode(out, skip_special_tokens=True)[0].strip()
 
 
